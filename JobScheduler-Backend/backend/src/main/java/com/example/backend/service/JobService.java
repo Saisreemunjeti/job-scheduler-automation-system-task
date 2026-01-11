@@ -1,0 +1,76 @@
+package com.example.backend.service;
+
+import com.example.backend.model.Job;
+import com.example.backend.repository.JobRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+
+@Service
+public class JobService {
+
+    @Autowired
+    private JobRepository repo;
+
+    public Job createJob(Job job) {
+        job.setStatus("pending");
+        job.setCreatedAt(LocalDateTime.now());
+        job.setUpdatedAt(LocalDateTime.now());
+        return repo.save(job);
+    }
+
+    public List<Job> getAllJobs() {
+        return repo.findAll();
+    }
+
+    public Job getJob(Long id) {
+        return repo.findById(id)
+                   .orElseThrow(() -> new RuntimeException("Job not found"));
+    }
+
+    @Async
+    public void runJob(Long id) {
+
+        Job job = repo.findById(id)
+                      .orElseThrow(() -> new RuntimeException("Job not found"));
+
+        job.setStatus("running");
+        repo.save(job);
+
+        try {
+            Thread.sleep(3000); // simulate job processing
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        job.setStatus("completed");
+        job.setUpdatedAt(LocalDateTime.now());
+        repo.save(job);
+
+        sendWebhook(job);
+    }
+
+    private void sendWebhook(Job job) {
+
+        RestTemplate rest = new RestTemplate();
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("jobId", job.getId());
+        data.put("taskName", job.getTaskName());
+        data.put("priority", job.getPriority());
+        data.put("payload", job.getPayload());
+        data.put("completedAt", LocalDateTime.now().toString());
+
+        rest.postForObject(
+            "https://webhook.site/e8a309fb-3e32-4837-bbd4-c3223c66e8b4",
+            data,
+            String.class
+        );
+    }
+}
